@@ -106,7 +106,14 @@ def main() -> int:
                      snapshots.min_market_pe_coverage(snapshots.load(result)) * 100)
             written.append(result)
 
+    # 「有寫入」不等於「資料完整」：交易所本益比公布得晚，下午的班次本來就會拿到
+    # 半套資料。這不算失敗（下一班會自動修補），但一定要在結論行講出來，
+    # 否則排程一片綠燈、資料卻是缺的，沒人會發現。
+    incomplete = [d for d in written if not snapshots.is_complete(d, universe)]
     print(f"\n寫入 {len(written)} 筆 {written} ｜ 略過 {len(skipped)} ｜ 失敗 {len(failed)}")
+    if incomplete:
+        print(f"⚠ 其中 {len(incomplete)} 份仍不完整 {incomplete} "
+              f"—— 交易所尚未公布本益比，或該市場暫時抓不到；下一班會自動重抓修補")
 
     if failed:
         return 1

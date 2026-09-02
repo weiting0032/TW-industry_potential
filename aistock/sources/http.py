@@ -77,7 +77,11 @@ def get_json(url: str, params: Dict[str, Any], *, host_key: str) -> Optional[dic
                 if not resp.text.strip():
                     return None
                 return resp.json()
-            log.warning("%s 回應 %s（第 %d 次）", host_key, resp.status_code, attempt)
+            # 5xx（含 Cloudflare 的 520~524）是對方伺服器的問題，重試通常會好；
+            # 4xx 多半是參數或被擋，重試意義不大 —— 分開記，log 才看得出該怎麼處理。
+            kind = "伺服器端錯誤，重試中" if resp.status_code >= 500 else "請求被拒"
+            log.warning("%s 回應 %s（%s，第 %d/%d 次）",
+                        host_key, resp.status_code, kind, attempt, MAX_RETRY)
         except (requests.RequestException, ValueError) as exc:
             log.warning("%s 請求失敗：%s（第 %d 次）", host_key, exc, attempt)
 
