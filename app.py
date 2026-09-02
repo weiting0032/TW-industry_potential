@@ -17,7 +17,7 @@ from aistock.analysis import (MIN_PE_HISTORY_SAMPLES, PE_UNPROFITABLE,
                               screen_low_base, sort_by_pe)
 from aistock.config import (DEFAULT_MA_TOLERANCE, DEFAULT_MIN_PULLBACK,
                             DEFAULT_PE_BENCHMARK, SNAPSHOT_ONLY)
-from aistock.industry import INDUSTRY_MAP, industry_names
+from aistock.industry import INDUSTRY_MAP, all_stocks, industry_names
 from aistock.pipeline import load_dataset
 
 st.set_page_config(page_title="台股 AI 產業鏈本益比追蹤",
@@ -39,6 +39,7 @@ def _secret(name: str) -> str:
 # 強制快照模式：環境變數（本機／Docker／VPS）或 secrets（Streamlit Cloud）
 FORCE_SNAPSHOT = SNAPSHOT_ONLY or _secret("AISEMI_SNAPSHOT_ONLY") in ("1", "true", "True")
 SNAPSHOT_DAYS = snapshots.available_dates()
+UNIVERSE_CODES = {s.code for s in all_stocks()}
 
 
 # --------------------------------------------------------------------------
@@ -112,10 +113,17 @@ else:
 
 if mode == "snapshot":
     labels = {d: fmt_day(d) for d in reversed(SNAPSHOT_DAYS)}
+    # 預設選「最近一份完整的」而不是「最新的」：收盤到交易所公布本益比之間
+    # 有數小時空窗，那段時間的最新快照只有價量，預設顯示它等於預設顯示一片「—」。
+    default_day = snapshots.latest_complete_date(UNIVERSE_CODES) or SNAPSHOT_DAYS[-1]
     date_key = st.sidebar.selectbox(
-        "交易日", list(labels), format_func=labels.get, index=0,
+        "交易日", list(labels), format_func=labels.get,
+        index=list(labels).index(default_day),
         help="可選日期即已抓取的快照；資料由排程每個交易日收盤後更新")
     st.sidebar.caption(f"📦 已收錄 {len(SNAPSHOT_DAYS)} 個交易日")
+    if default_day != SNAPSHOT_DAYS[-1]:
+        st.sidebar.caption(f"ℹ️ {fmt_day(SNAPSHOT_DAYS[-1])} 的本益比交易所尚未公布，"
+                           "預設顯示前一個完整交易日")
 else:
     use_latest = st.sidebar.checkbox("使用最近交易日", value=True)
     picked = st.sidebar.date_input("指定日期", value=dt.date.today(),

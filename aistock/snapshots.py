@@ -92,12 +92,31 @@ def is_complete(date_str: str, universe: Optional[Iterable[str]] = None) -> bool
 
     刻意用參數傳入而不 import industry：快照層不該知道產業分類的存在。
     """
-    df = load(date_str)
+    df = load(date_str, columns=["code", "pe", "market"])
     if df is None or df.empty:
         return False
     if universe is not None and set(universe) - set(df["code"].astype(str)):
         return False
     return min_market_pe_coverage(df) >= MIN_PE_COVERAGE
+
+
+def latest_complete_date(universe: Optional[Iterable[str]] = None,
+                         max_scan: int = 10) -> Optional[str]:
+    """最近一份「完整」的快照；往回找不到就退回最新的那份。
+
+    給 App 當預設日期用。當日 13:30 收盤到交易所公布本益比之間有好幾個小時空窗，
+    這段時間最新快照必然不完整（有價無本益比）。若一律預設顯示最新日期，
+    使用者每個交易日下午打開都會看到一片「—」加一條警告 ——
+    預設落在最近一份完整資料上，才是他真正想看的東西。
+    不完整的那份仍然留在下拉選單裡，想看當日盤後價量隨時可以切過去。
+    """
+    days = available_dates()
+    if not days:
+        return None
+    for d in reversed(days[-max_scan:]):
+        if is_complete(d, universe):
+            return d
+    return days[-1]
 
 
 def available_dates() -> List[str]:
