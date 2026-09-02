@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import datetime as dt
 import sys
 from pathlib import Path
 
@@ -27,23 +28,34 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from aistock.industry import all_stocks                    # noqa: E402
-from aistock.pipeline import resolve_trading_day           # noqa: E402
-from aistock.sources import tpex, twse                     # noqa: E402
+from aistock.pipeline import fetch_market_snapshot         # noqa: E402
 
 
 def main() -> int:
-    day = sys.argv[1] if len(sys.argv) > 1 else resolve_trading_day()
-    if day is None:
-        print("✗ 查不到可用交易日，無法對帳")
+    """走 fetch_market_snapshot 而不是直接呼叫 twse/tpex：它會讀 data/cache 的
+    全市場快照。排程把這支排在 fetch_daily「之後」，就能重用剛剛抓下來的資料，
+    不必為了對帳再下載一次 4.5 MB 的收盤行情。"""
+    arg = sys.argv[1] if len(sys.argv) > 1 else None
+    target = dt.datetime.strptime(arg, "%Y%m%d").date() if arg else None
+
+    day, market = fetch_market_snapshot(target)
+    if day is None or market is None:
+        print("✗ 抓不到全市場清單，無法對帳")
         return 1
 
     listed = {}
-    for df, market in ((twse.fetch(day), "TWSE"), (tpex.fetch(day), "TPEx")):
-        if df is None:
-            print(f"✗ {market} 清單抓取失敗")
-            return 1
-        for code, name in zip(df["code"], df["name"]):
-            listed[str(code).strip()] = (str(name).strip(), market)
+    for code, name, mk in zip(market["code"], market["name"], market["market"]):
+        listed[str(code).strip()] = (str(name).strip(), str(mk).strip())
+
+    # 先確認每個市場都真的抓到了。少了一整個交易所卻照常逐檔比對的話，
+    # 畫面上會是「幾十檔上櫃股同時下市」—— 訊息完全指錯方向。
+    universe_markets = {s.market for s in all_stocks()}
+    listed_markets = {mk for _, mk in listed.values()}
+    if universe_markets - listed_markets:
+        absent = "、".join(sorted(universe_markets - listed_markets))
+        print(f"✗ 清單裡完全沒有 {absent} 的個股 —— 是該交易所的資料沒抓到，"
+              f"不是成分股有問題。請確認網路與 API 狀態後重跑，不要據此修改產業字典。")
+        return 1
 
     missing, wrong_market, renamed = [], [], []
     for s in all_stocks():

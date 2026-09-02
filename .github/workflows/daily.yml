@@ -50,11 +50,6 @@ jobs:
       - name: 安裝相依套件
         run: pip install -r requirements-fetch.txt
 
-      - name: 對帳產業成分股
-        # 代號下市／改名／換板會讓該檔的資料整列變空，但流程不會報錯 ——
-        # 先跟交易所實際掛牌清單對一次，有問題就在 log 裡講清楚。
-        run: python scripts/check_universe.py || true
-
       - name: 抓取快照
         id: fetch
         run: |
@@ -66,6 +61,16 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -20 fetch.log >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 對帳產業成分股
+        # 代號下市／改名／換板會讓該檔的資料整列變空，流程卻不會報錯 ——
+        # 跟交易所實際掛牌清單對一次，有問題就在 log 裡講清楚。
+        # 刻意排在抓取「之後」：這樣會直接重用 data/cache 裡剛抓好的全市場快照，
+        # 不必為了對帳再下載一次 4.5 MB 的收盤行情。
+        # 抓取失敗時更需要這份資訊，所以用 always()；本身不該讓整個 job 變紅。
+        if: always()
+        continue-on-error: true
+        run: python scripts/check_universe.py
 
       - name: Commit 新快照
         if: always()

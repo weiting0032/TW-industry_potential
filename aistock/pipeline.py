@@ -98,7 +98,15 @@ def fetch_market_snapshot(date: Optional[dt.date] = None,
     market["code"] = market["code"].astype(str).str.strip()
     market = market.drop_duplicates(subset="code", keep="first")
 
-    cache.save(f"market_{date_str}", market)
+    # 只有兩個交易所都抓到才寫快取。少了一邊仍然回傳（讓上層自己決定要不要用），
+    # 但絕不能存起來 —— 存了之後 12 小時內每一次讀取都會拿到「整個上櫃憑空消失」
+    # 的資料，而且完全看不出異常：對帳程式會說幾十檔上櫃股全部下市了。
+    if twse_df is not None and tpex_df is not None:
+        cache.save(f"market_{date_str}", market)
+    else:
+        missing = "上市" if twse_df is None else "上櫃"
+        log.warning("%s %s 資料缺漏，本次不寫入快取", date_str, missing)
+
     return date_str, market
 
 
