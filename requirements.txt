@@ -1,0 +1,12 @@
+# 前端 App（Streamlit Community Cloud）的相依套件。
+# 刻意不含 yfinance：它只在「即時擷取」抓歷史均線時才會被 import，
+# 而雲端跑的是快照模式，卻要為它裝上 curl_cffi 等一整串二進位相依 ——
+# 拖慢冷啟動也增加部署失敗機率。排程用的清單見 requirements-fetch.txt。
+#
+# streamlit 下限拉到 1.50：程式用到 width="stretch"、st.bar_chart(horizontal=)
+# 這些較新的 API，1.40 會直接報錯。
+streamlit>=1.50
+pandas>=2.0
+numpy>=1.26
+requests>=2.31
+pyarrow>=15.0

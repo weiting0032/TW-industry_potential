@@ -1,0 +1,11 @@
+# 排程抓取（GitHub Actions／本機補跑）用：前端相依 + 只有抓資料才需要的套件。
+-r requirements.txt
+
+# 歷史收盤價（算均線與 52 週高低點）
+yfinance>=0.2.40
+
+# 改用作業系統憑證庫驗證 TLS。企業內網的攔截代理會重簽憑證，
+# 而重簽出來的憑證常缺 Subject Key Identifier，OpenSSL 3.x 會拒絕，
+# 導致 requests 連櫃買中心時出現 CERTIFICATE_VERIFY_FAILED。
+# GitHub Actions 上用不到，裝著也無害；沒安裝時程式會自動略過。
+truststore>=0.10

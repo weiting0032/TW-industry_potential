@@ -1,0 +1,8 @@
+# Windows 開發、Linux（GitHub Actions）執行，行尾必須講清楚。
+* text=auto eol=lf
+
+# PowerShell 由 Windows 原生程式執行，維持 CRLF
+*.ps1 text eol=crlf
+
+# 快照是二進位資料：絕不能被當文字做行尾轉換，那會直接毀掉檔案
+*.parquet binary

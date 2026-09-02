@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+fetch.log
+
+# 暫時性快取：可隨時重建，不進版控
+data/cache/*.parquet
+
+# Streamlit secrets：本機測試用，絕不 commit
+.streamlit/secrets.toml
+
+# data/snapshots/*.parquet 刻意「不」忽略 —— 那是排程產出、要 commit 的資料

@@ -1,0 +1,88 @@
+name: 每日抓取台股收盤快照
+
+on:
+  schedule:
+    # GitHub Actions 的 cron 一律是 UTC。
+    #
+    # 時間點的依據（實測，不是猜的）：台股 13:30 收盤，但「本益比」不是收盤就有。
+    # 台北時間 15:08 實測，證交所 BWIBBU_d 回「很抱歉，沒有符合條件的資料!」、
+    # 櫃買 peQryDate 回 0 筆，此時抓到的只有價量 —— 本益比正是這個 App 的核心欄位。
+    # 舊排程排在 15:00，剛好落在資料還沒公布的空窗，因此改為 17:00 起跑。
+    #
+    # 三個班次不是重工：快照已完整會自動略過，不完整才重抓修補
+    # （判定見 aistock/snapshots.py 的 is_complete，上市與上櫃分別看覆蓋率）。
+    - cron: "0 9 * * 1-5"     # 17:00 台北
+    - cron: "0 12 * * 1-5"    # 20:00 台北
+    - cron: "0 15 * * 1-5"    # 23:00 台北
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "回補最近 N 個交易日（留空則只抓最近一日）"
+        required: false
+        default: ""
+      force:
+        description: "快照已完整也重新抓取"
+        type: boolean
+        default: false
+
+# 三個班次若重疊，讓先跑的跑完，避免同時 commit 打架
+concurrency:
+  group: daily-snapshot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-fetch.txt
+
+      - name: 安裝相依套件
+        run: pip install -r requirements-fetch.txt
+
+      - name: 對帳產業成分股
+        # 代號下市／改名／換板會讓該檔的資料整列變空，但流程不會報錯 ——
+        # 先跟交易所實際掛牌清單對一次，有問題就在 log 裡講清楚。
+        run: python scripts/check_universe.py || true
+
+      - name: 抓取快照
+        id: fetch
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.backfill }}" ]; then ARGS="$ARGS --backfill ${{ inputs.backfill }}"; fi
+          if [ "${{ inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          python scripts/fetch_daily.py $ARGS | tee fetch.log
+          echo "### 抓取結果" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -20 fetch.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit 新快照
+        if: always()
+        run: |
+          rm -f fetch.log
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/snapshots
+          if git diff --staged --quiet; then
+            echo "沒有新快照，不需 commit"
+            exit 0
+          fi
+          git commit -m "data: 更新台股收盤快照 $(date -u +%Y-%m-%d)"
+          # 三個班次或手動觸發可能撞在一起，rebase 後再推
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && \
+            git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            echo "推送失敗，重試 $i…"; sleep 5
+          done
+          exit 1

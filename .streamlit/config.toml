@@ -1,0 +1,11 @@
+[server]
+headless = true
+# 刻意不設 port：Streamlit Community Cloud 由平台指派連接埠，
+# 這裡寫死反而可能對不上。本機用 `streamlit run app.py --server.port 8501` 指定即可。
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#0F766E"
